@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SidGPT</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- LIBRARIES -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+/* CALCULATOR GRID FIX */
+.calcgrid{
+display:grid;
+grid-template-columns:repeat(4,1fr);
+gap:10px;
+margin-top:15px;
+max-width:320px;
+}
+
+.calcbtn{
+background:#1e293b;
+padding:15px;
+border-radius:10px;
+text-align:center;
+cursor:pointer;
+font-size:18px;
+}
+
+.calcbtn:hover{
+background:#334155;
+}
+
+/* RESET */
+*{margin:0;padding:0;box-sizing:border-box;font-family:Inter,system-ui}
+
+/* BODY */
+body{
+height:100vh;
+background:radial-gradient(circle at top,#1e3a8a,#020617);
+color:white;
+display:flex;
+overflow:hidden;
+}
+
+/* GLASS */
+.glass{
+background:rgba(255,255,255,.08);
+backdrop-filter:blur(18px);
+border-radius:18px;
+border:1px solid rgba(255,255,255,.15);
+box-shadow:0 0 40px rgba(255,255,255,.08);
+}
+
+/* SIDEBAR */
+.sidebar{
+width:240px;
+padding:20px;
+display:flex;
+flex-direction:column;
+gap:10px;
+}
+
+/* NAV BTN */
+.navbtn{
+padding:14px;
+border-radius:12px;
+background:rgba(255,255,255,.06);
+cursor:pointer;
+transition:.2s;
+}
+
+.navbtn:hover{
+background:#2563eb;
+transform:scale(1.05);
+}
+
+/* MAIN */
+.main{
+flex:1;
+padding:25px;
+overflow:auto;
+}
+
+/* INPUTS */
+textarea,input{
+width:100%;
+padding:12px;
+border-radius:10px;
+border:none;
+background:#020617;
+color:white;
+margin-top:10px;
+}
+
+/* BUTTON */
+button{
+padding:12px;
+border-radius:10px;
+border:none;
+background:#2563eb;
+color:white;
+margin-top:10px;
+cursor:pointer;
+transition:.2s;
+}
+
+button:hover{
+box-shadow:0 0 15px #2563eb;
+transform:scale(1.05);
+}
+
+/* FLASHCARDS */
+.cards{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+gap:15px;
+margin-top:15px;
+}
+
+.card{
+background:rgba(255,255,255,.08);
+padding:15px;
+border-radius:12px;
+min-height:120px;
+display:flex;
+align-items:center;
+justify-content:center;
+cursor:pointer;
+transition:.2s;
+}
+
+.card:hover{transform:translateY(-6px)}
+
+/* QUIZ OPTIONS */
+.option{
+background:#1e293b;
+padding:12px;
+border-radius:10px;
+margin-top:8px;
+cursor:pointer;
+}
+
+.option:hover{background:#334155}
+.correct{background:#16a34a!important}
+.wrong{background:#dc2626!important}
+
+/* CHAT */
+.chatWindow{
+height:320px;
+overflow:auto;
+background:#020617;
+padding:10px;
+border-radius:12px;
+margin-top:10px;
+}
+
+/* LOCK SCREEN */
+#lockScreen{
+position:fixed;
+inset:0;
+background:#020617;
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:1000;
+}
+
+#lockBox{
+width:320px;
+padding:25px;
+text-align:center;
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- LOCK -->
+<div id="lockScreen">
+<div id="lockBox" class="glass">
+<h2>SidGPT</h2>
+<p>Enter your Groq API Key</p>
+<input id="apiInput" placeholder="gsk_...">
+<button onclick="unlock()">Enter</button>
+</div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar glass">
+<h2>SidGPT</h2>
+<div class="navbtn" onclick="showTab('flash')">Flashcards</div>
+<div class="navbtn" onclick="showTab('summary')">Summarizer</div>
+<div class="navbtn" onclick="showTab('quiz')">Quiz</div>
+<div class="navbtn" onclick="showTab('calc')">Calculator</div>
+<div class="navbtn" onclick="showTab('chat')">Chatbot</div>
+</div>
+
+<!-- MAIN -->
+<div class="main glass">
+
+<!-- FLASH -->
+<div id="flash">
+<h2>Flashcards</h2>
+<input type="file" id="flashPDF">
+<textarea id="flashText"></textarea>
+<button onclick="loadFlashPDF()">Load PDF</button>
+<button onclick="genFlash()">Generate</button>
+<div id="flashCards" class="cards"></div>
+</div>
+
+<!-- SUMMARY -->
+<div id="summary" style="display:none">
+<h2>Summarizer</h2>
+<input type="file" id="sumPDF">
+<textarea id="sumText"></textarea>
+<button onclick="loadSumPDF()">Load PDF</button>
+<button onclick="genSummary()">Summarize</button>
+<textarea id="sumOut"></textarea>
+</div>
+
+<!-- QUIZ -->
+<div id="quiz" style="display:none">
+<h2>Quiz Generator</h2>
+<input type="file" id="quizPDF">
+<textarea id="quizText"></textarea>
+<button onclick="loadQuizPDF()">Load PDF</button>
+<button onclick="genQuiz()">Generate Quiz</button>
+<button onclick="genAnswerSheet()">Answer Sheet PDF</button>
+<h3 id="qText"></h3>
+<div id="opts"></div>
+<div id="scoreBox"></div>
+</div>
+
+<!-- CALC -->
+<div id="calc" style="display:none">
+<h2>Calculator</h2>
+<input id="calcDisplay">
+<div class="calcgrid">
+<div class="calcbtn" onclick="addCalc('7')">7</div>
+<div class="calcbtn" onclick="addCalc('8')">8</div>
+<div class="calcbtn" onclick="addCalc('9')">9</div>
+<div class="calcbtn" onclick="addCalc('/')">/</div>
+<div class="calcbtn" onclick="addCalc('4')">4</div>
+<div class="calcbtn" onclick="addCalc('5')">5</div>
+<div class="calcbtn" onclick="addCalc('6')">6</div>
+<div class="calcbtn" onclick="addCalc('*')">*</div>
+<div class="calcbtn" onclick="addCalc('1')">1</div>
+<div class="calcbtn" onclick="addCalc('2')">2</div>
+<div class="calcbtn" onclick="addCalc('3')">3</div>
+<div class="calcbtn" onclick="addCalc('-')">-</div>
+<div class="calcbtn" onclick="addCalc('0')">0</div>
+<div class="calcbtn" onclick="addCalc('.')">.</div>
+<div class="calcbtn" onclick="calculate()">=</div>
+<div class="calcbtn" onclick="addCalc('+')">+</div>
+</div>
+</div>
+
+<!-- CHAT -->
+<div id="chat" style="display:none">
+<h2>SidGPT Chat</h2>
+<div id="chatWindow" class="chatWindow"></div>
+<textarea id="chatInput"></textarea>
+<button onclick="sendChat()">Send</button>
+</div>
+
+</div>
+
+<script>
+
+/* WAIT FOR PART 2 */
+/* PDF WORKER */
+pdfjsLib.GlobalWorkerOptions.workerSrc=
+"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+
+/* GLOBALS */
+let API_KEY="";
+let quiz=[],qi=0,score=0;
+
+/* UNLOCK */
+function unlock(){
+API_KEY=document.getElementById("apiInput").value.trim();
+if(!API_KEY) return alert("Enter API key");
+document.getElementById("lockScreen").style.display="none";
+}
+
+/* NAV */
+function showTab(id){
+["flash","summary","quiz","calc","chat"].forEach(t=>{
+document.getElementById(t).style.display="none";
+});
+document.getElementById(id).style.display="block";
+}
+
+/* AI */
+async function askAI(prompt){
+let r=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"Authorization":"Bearer "+API_KEY
+},
+body:JSON.stringify({
+model:"llama-3.1-8b-instant",
+messages:[{role:"user",content:prompt}],
+temperature:0.3
+})
+});
+let d=await r.json();
+return d.choices[0].message.content;
+}
+
+/* PDF READER */
+async function readPDF(file){
+const buf=await file.arrayBuffer();
+const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+let text="";
+for(let i=1;i<=pdf.numPages;i++){
+let p=await pdf.getPage(i);
+let c=await p.getTextContent();
+text+=c.items.map(x=>x.str).join(" ");
+}
+return text;
+}
+
+async function loadFlashPDF(){flashText.value=await readPDF(flashPDF.files[0]);}
+async function loadSumPDF(){sumText.value=await readPDF(sumPDF.files[0]);}
+async function loadQuizPDF(){quizText.value=await readPDF(quizPDF.files[0]);}
+
+/* FLASHCARDS */
+async function genFlash(){
+let raw=await askAI(`Create 8 flashcards JSON [{"q":"","a":""}] Text:${flashText.value}`);
+raw=raw.substring(raw.indexOf("["),raw.lastIndexOf("]")+1);
+let cards=JSON.parse(raw);
+flashCards.innerHTML="";
+cards.forEach(c=>{
+let d=document.createElement("div");
+d.className="card";
+d.innerText=c.q;
+d.onclick=()=>d.innerText=d.innerText==c.q?c.a:c.q;
+flashCards.appendChild(d);
+});
+}
+
+/* SUMMARY */
+async function genSummary(){
+sumOut.value=await askAI("Summarize in bullets:\n"+sumText.value);
+}
+
+/* QUIZ */
+async function genQuiz(){
+let raw=await askAI(`Generate 8 MCQs JSON:
+[{"question":"","options":["A","B","C","D"],"answer":0}]
+Text:${quizText.value}`);
+raw=raw.substring(raw.indexOf("["),raw.lastIndexOf("]")+1);
+quiz=JSON.parse(raw);
+qi=0;score=0;
+showQ();
+}
+
+function showQ(){
+let q=quiz[qi];
+qText.innerText=q.question;
+opts.innerHTML="";
+q.options.forEach((o,i)=>{
+let d=document.createElement("div");
+d.className="option";
+d.innerText=o;
+d.onclick=()=>check(i);
+opts.appendChild(d);
+});
+scoreBox.innerText=`Score ${score}/${quiz.length}`;
+}
+
+function check(i){
+if(i===quiz[qi].answer)score++;
+qi++;
+if(qi<quiz.length)showQ();
+else qText.innerText="Quiz Finished!";
+}
+
+/* ANSWER SHEET */
+async function genAnswerSheet(){
+let ans=await askAI("Solve worksheet and list numbered answers:\n"+quizText.value);
+const {jsPDF}=window.jspdf;
+let pdf=new jsPDF();
+let lines=pdf.splitTextToSize(ans,180);
+pdf.text(lines,10,10);
+pdf.save("answers.pdf");
+}
+
+/* CALCULATOR */
+function addCalc(v){calcDisplay.value+=v;}
+function calculate(){
+try{calcDisplay.value=eval(calcDisplay.value);}
+catch{calcDisplay.value="Error";}
+}
+
+/* CHAT */
+chatInput.addEventListener("keydown",e=>{
+if(e.key==="Enter"){e.preventDefault();sendChat();}
+});
+
+async function sendChat(){
+let msg=chatInput.value;
+chatWindow.innerHTML+=`<div><b>You:</b> ${msg}</div>`;
+chatInput.value="";
+let rep=await askAI(msg);
+chatWindow.innerHTML+=`<div><b>SidGPT:</b> ${rep}</div>`;
+chatWindow.scrollTop=chatWindow.scrollHeight;
+}
+
+</script>
+</body>
+</html>
+
